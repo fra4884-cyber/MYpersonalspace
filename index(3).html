@@ -650,11 +650,19 @@ function setMood(val){
   renderMoodHistory();
 }
 function loadMood(){
-  const val=db.mood[new Date().toDateString()];
+  if (!db.mood) db.mood = {};   // ✅ prevenzione crash
+
+  const today = new Date().toDateString();
+  const val = db.mood[today];
+
   if(val){
-    document.getElementById('home-mood-val').textContent=val;
-    document.querySelectorAll('.mood-chip').forEach(c=>c.classList.toggle('selected',c.textContent===val));
+    document.getElementById('home-mood-val').textContent = val;
+    document.querySelectorAll('.mood-chip')
+      .forEach(c => c.classList.toggle('selected', c.textContent === val));
+  } else {
+    document.getElementById('home-mood-val').textContent = "—";
   }
+}
 }
 function renderMoodHistory(){
   const el=document.getElementById('mood-history');
@@ -933,7 +941,14 @@ function fmtShort(s){const d=new Date(s);return isNaN(d)?s:d.toLocaleDateString(
 
 // ── RELOAD UI ─────────────────────────────────────────────────────────────────
 window.reloadUI = function(){
-  db = JSON.parse(localStorage.getItem(KEY)||'null') || db;
+  db = JSON.parse(localStorage.getItem(KEY) || '{}');
+
+// ✅ garantiamo che esistano SEMPRE le sezioni base
+if (!db.mood) db.mood = {};
+if (!db.notes) db.notes = [];
+if (!db.tasks) db.tasks = [];
+if (!db.media) db.media = [];
+if (!db.projects) db.projects = [];
   loadMood(); updateHomeCounters(); renderHomeDiaryPreview();
   const active = document.querySelector('.page.active');
   if(active){
