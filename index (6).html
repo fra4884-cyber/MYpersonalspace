@@ -27,9 +27,17 @@ const db = getDatabase(app);
 const REF = ref(db, "utenti/francesco");
 
 // --- SALVA ---
-window.saveToCloud = async (data) => {
-  try { await set(REF, data); }
-  catch(e) { console.warn("Firebase save error:", e); }
+// ✅ SALVATAGGIO NON DISTRUTTIVO PER SEZIONE
+window.saveToCloud = async (section, data) => {
+  try {
+    const path = ref(db, `utenti/francesco/${section}`);
+    await update(path, {
+      ...data,
+      _ts: Date.now()
+    });
+  } catch (e) {
+    console.warn("Firebase update error:", e);
+  }
 };
 
 // --- SYNC REALTIME ---
@@ -37,22 +45,37 @@ onValue(REF, snap => {
   const remote = snap.val();
   if (!remote) return;
 
-  const local = JSON.parse(localStorage.getItem("dashboard_v3") || "null");
-  if (!local || (remote._ts || 0) > (local._ts || 0)) {
-    localStorage.setItem("dashboard_v3", JSON.stringify(remote));
-    if (window.reloadUI) window.reloadUI();
+  const local = JSON.parse(localStorage.getItem("dashboard_v3") || "{}");
+  const merged = { ...local };
+
+  // ✅ Aggiorna SOLO le sezioni modificate
+  for (const k of Object.keys(remote)) {
+    if (!local[k] || (remote[k]._ts || 0) > (local[k]._ts || 0)) {
+      merged[k] = remote[k];
+    }
   }
+
+  localStorage.setItem("dashboard_v3", JSON.stringify(merged));
+  if (window.reloadUI) window.reloadUI();
 });
 
 // --- PRIMA LETTURA ---
 get(REF).then(snap => {
   if (snap.exists()) {
     const remote = snap.val();
-    const local = JSON.parse(localStorage.getItem("dashboard_v3") || "null");
-    if (!local || (remote._ts || 0) > (local._ts || 0)) {
-      localStorage.setItem("dashboard_v3", JSON.stringify(remote));
+    const local = JSON.parse(localStorage.getItem("dashboard_v3") || "{}");
+
+    const merged = { ...local };
+
+    for (const k of Object.keys(remote)) {
+      if (!local[k] || (remote[k]._ts || 0) > (local[k]._ts || 0)) {
+        merged[k] = remote[k];
+      }
     }
+
+    localStorage.setItem("dashboard_v3", JSON.stringify(merged));
   }
+
   window.firebaseReady = true;
   if (window._fbResolve) window._fbResolve();
 }).catch(() => {
@@ -594,21 +617,49 @@ const PRESET_EXAMS=[
 ];
 
 // ── DB ────────────────────────────────────────────────────────────────────────
-const KEY='dashboard_v3';
-let db=JSON.parse(localStorage.getItem(KEY)||'null');
-if(!db){
-  db={
-    exams:PRESET_EXAMS.map((e,i)=>({...e,addedAt:new Date(Date.now()-(PRESET_EXAMS.length-i)*86400000*7).toISOString(),date:null})),
-    notes:[],diary:[],media:[],todos:[],mood:{}
+const KEY = 'dashboard_v3';
+
+// Carica il DB locale
+let db = JSON.parse(localStorage.getItem(KEY) || 'null');
+
+// Se non esiste, crea struttura iniziale
+if (!db) {
+  db = {
+    exams: PRESET_EXAMS.map((e, i) => ({
+      ...e,
+      addedAt: new Date(Date.now() - (PRESET_EXAMS.length - i) * 86400000 * 7).toISOString(),
+      date: null
+    })),
+    notes: [],
+    diary: [],
+    media: [],
+    todos: [],
+    mood: {}
   };
-  save();
-}
-function save(){
-  db._ts = Date.now();
-  localStorage.setItem(KEY, JSON.stringify(db));
-  if(window.saveToCloud) window.saveToCloud(db);
+
+  save("init"); // primo salvataggio locale
 }
 
+/**
+ * ✅ Salva SOLO la sezione modificata
+ *   - salva in localStorage
+ *   - salva in Firebase usando saveToCloud(section, data)
+ */
+function save(section) {
+
+  // ✅ salva tutto in locale
+  localStorage.setItem(KEY, JSON.stringify(db));
+
+  // ✅ salva in cloud SOLO la sezione specificata
+  if (window.saveToCloud && section) {
+    const payload = {
+      ...db[section],
+      _ts: Date.now()
+    };
+
+    window.saveToCloud(section, payload);
+  }
+}
 // ── NAV ───────────────────────────────────────────────────────────────────────
 let mediaFilter='tutti';
 function navigate(id){
