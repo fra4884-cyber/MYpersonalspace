@@ -594,21 +594,37 @@ const PRESET_EXAMS=[
 ];
 
 // ── DB ────────────────────────────────────────────────────────────────────────
-const KEY='dashboard_v3';
-let db=JSON.parse(localStorage.getItem(KEY)||'null');
-if(!db){
-  db={
-    exams:PRESET_EXAMS.map((e,i)=>({...e,addedAt:new Date(Date.now()-(PRESET_EXAMS.length-i)*86400000*7).toISOString(),date:null})),
-    notes:[],diary:[],media:[],todos:[],mood:{}
-  };
-  save();
+const KEY = 'dashboard_v3';
+
+// ✅ Carichiamo dal localStorage oppure creiamo un oggetto vuoto
+let db = JSON.parse(localStorage.getItem(KEY) || '{}');
+
+// ✅ Creiamo sempre tutte le sezioni necessarie (ANTI-CRASH)
+if (!db.mood) db.mood = {};
+if (!db.notes) db.notes = [];
+if (!db.tasks) db.tasks = [];
+if (!db.diary) db.diary = [];
+if (!db.media) db.media = [];
+if (!db.projects) db.projects = [];
+if (!db.study) db.study = [];
+if (!db.exams) {
+  // ✅ Se non ci sono esami, usiamo i preset
+  db.exams = PRESET_EXAMS.map((e, i) => ({
+    ...e,
+    addedAt: new Date(Date.now() - (PRESET_EXAMS.length - i) * 86400000 * 7).toISOString(),
+    date: null
+  }));
 }
+
+// ✅ Salva locale + cloud
 function save(){
   db._ts = Date.now();
   localStorage.setItem(KEY, JSON.stringify(db));
-  if(window.saveToCloud) window.saveToCloud(db);
-}
 
+  if (window.firebaseReady && window.saveToCloud) {
+    window.saveToCloud(db);
+  }
+}
 // ── NAV ───────────────────────────────────────────────────────────────────────
 let mediaFilter='tutti';
 function navigate(id){
@@ -938,32 +954,67 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function formatDate(iso){return new Date(iso).toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
 function fmtShort(s){const d=new Date(s);return isNaN(d)?s:d.toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'});}
 
-// ── RELOAD UI ─────────────────────────────────────────────────────────────────
+// ──// ── RELOAD UI ─────────────────────────────────────────────────────────────────
 window.reloadUI = function(){
+
+  // ✅ Carica il DB dal localStorage
   db = JSON.parse(localStorage.getItem(KEY) || '{}');
 
-// ✅ garantiamo che esistano SEMPRE le sezioni base
-if (!db.mood) db.mood = {};
-if (!db.notes) db.notes = [];
-if (!db.tasks) db.tasks = [];
-if (!db.media) db.media = [];
-if (!db.projects) db.projects = [];
-  loadMood(); updateHomeCounters(); renderHomeDiaryPreview();
+  // ✅ Creiamo tutte le strutture base se mancano (ANTI‑CRASH)
+  if (!db.mood) db.mood = {};
+  if (!db.notes) db.notes = [];
+  if (!db.tasks) db.tasks = [];
+  if (!db.diary) db.diary = [];
+  if (!db.media) db.media = [];
+  if (!db.projects) db.projects = [];
+  if (!db.study) db.study = [];
+  if (!db.exams) db.exams = [];
+
+  // ✅ UI update
+  loadMood();
+  updateHomeCounters();
+  renderHomeDiaryPreview();
+
   const active = document.querySelector('.page.active');
   if(active){
     const id = active.id.replace('page-','');
-    ({study:renderStudy,exams:renderExamsList,notes:renderNotesList,
-      diary:renderDiaryPage,media:renderMediaList,projects:renderTodosList})[id]?.();
+    ({
+      study:renderStudy,
+      exams:renderExamsList,
+      notes:renderNotesList,
+      diary:renderDiaryPage,
+      media:renderMediaList,
+      projects:renderTodosList
+    })[id]?.();
   }
 };
 
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function startApp(){
-  const stored = JSON.parse(localStorage.getItem(KEY)||'null');
-  if(stored) db = stored;
-  initDate(); loadMood(); updateHomeCounters(); renderHomeDiaryPreview(); loadNews();
+
+  // ✅ Carichiamo localStorage
+  const stored = JSON.parse(localStorage.getItem(KEY)||'{}');
+  db = stored;
+
+  // ✅ ASSICURIAMO le strutture base anche al primo avvio
+  if (!db.mood) db.mood = {};
+  if (!db.notes) db.notes = [];
+  if (!db.tasks) db.tasks = [];
+  if (!db.diary) db.diary = [];
+  if (!db.media) db.media = [];
+  if (!db.projects) db.projects = [];
+  if (!db.study) db.study = [];
+  if (!db.exams) db.exams = [];
+
+  initDate();
+  loadMood();
+  updateHomeCounters();
+  renderHomeDiaryPreview();
+  loadNews();
 }
 
+// ✅ Aspettiamo Firebase, oppure 3 secondi massimo
 if(window._firebaseInitPromise){
   Promise.race([
     window._firebaseInitPromise,
@@ -972,6 +1023,3 @@ if(window._firebaseInitPromise){
 } else {
   startApp();
 }
-</script>
-</body>
-</html>
